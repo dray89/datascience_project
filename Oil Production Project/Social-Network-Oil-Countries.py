@@ -14,10 +14,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 
+#Get API key from EIA website and pass into eia.API() method
 apiKey = "5f54b3e66477e22ec068066b1de8026d"
 api = eia.API(apiKey)
-
-url = "http://api.eia.gov/geoset/?geoset_id=sssssss&regions=region1,region2,region3,...&api_key={0}[&start=|&num=][&end=][&out=xml|json]".format(api)
 
 series_id_list = ["INTL.57-1-DZA-TBPD.M", "INTL.57-1-AGO-TBPD.M", "INTL.57-1-COG-TBPD.M", "INTL.57-1-COD-TBPD.M", 
                   "INTL.57-1-ECU-TBPD.M","INTL.57-1-GNQ-TBPD.M","INTL.57-1-GAB-TBPD.M","INTL.57-1-IRN-TBPD.M",
@@ -25,31 +24,27 @@ series_id_list = ["INTL.57-1-DZA-TBPD.M", "INTL.57-1-AGO-TBPD.M", "INTL.57-1-COG
                   "INTL.57-1-QAT-TBPD.M", "INTL.57-1-RUS-TBPD.M", "INTL.57-1-SAU-TBPD.M","INTL.57-1-ARE-TBPD.M",
                   "INTL.57-1-VEN-TBPD.M", "INTL.57-1-USA-TBPD.M"]
 
+#call the method for each series within the api.data_by_series() method and plug into a pandas dataframe
 df_list = [pd.DataFrame(api.data_by_series(series)) for series in series_id_list]
-
 oil_data = pd.concat(df_list, axis=1)
 
+#Drop NAN values
 oil_data = oil_data.replace("--", np.nan)
-
- 
 oil_data.dropna().shape
-
- 
 oil_data.shape
-
- 
 oil_data_reduced = oil_data.dropna()
 
- 
 oil_data_reduced
 
- 
+#Rename Columns
 oil_data_reduced.columns = ["Algeria", "Angola", "Congo-Brazzaville", "Congo-Kinshasa", "Ecuador", "Equatorial Guinea", "Gabon", "Iran",
                 "Iraq", "Kuwait", "Libya", "Nigeria", "Qatar", "Russia", "Saudi Arabia", "United Arab Emirates", "Venezuela", "USA"]
-corrs = oil_data_reduced.corr()
 
- 
-corrs[(corrs>=.5) | (corrs<=-.5) & (corrs!=1)]
+#Check out the highest oil producing countries by average volume
+oil_data_reduced.mean(axis=0).sort_values(ascending=False)
+
+#get correlations
+corrs = oil_data_reduced.corr()
 
  
 # Transform it in a links data frame (3 columns only):
@@ -57,24 +52,20 @@ links = corrs.stack().reset_index()
 links
 
  
-links.columns = ['var1', 'var2','value']
-len(links['var1'].unique())
+links.columns = ['country A', 'country B','value']
+len(links['corr1'].unique())
 
- 
+# Positive Correlations
 # Keep only correlation over a threshold and remove self correlation (cor(A,A)=1)
-links_filtered=links.loc[ (links['value'] > 0.5) & (links['var1'] != links['var2']) ]
+positive_correlations =links.loc[ (links['value'] > 0.5) & (links['country A'] != links['country B']) ]
 
- 
-all_links = nx.from_pandas_edgelist(links_filtered, 'var1', 'var2')
-
-
-pos = nx.circular_layout(all_links)
+positive_links = nx.from_pandas_edgelist(positive_correlations, 'country A', 'country B')
+pos = nx.circular_layout(positive_links)
 
 labels = list(pos.keys())
 labels = dict(zip(labels, labels))
 
 pos_higher = {}
-
 for k, v in pos.items():
     if(v[1]>0):
         pos_higher[k] = (v[0], v[1]+0.06)
@@ -89,57 +80,52 @@ fig, ax = plt.subplots(figsize=(20,20))
 margin=.05
 fig.subplots_adjust(margin, margin, 1.-margin, 1.-margin)
 ax.axis('equal')
-nx.draw(all_links, pos =pos, edge_color='black')
-nx.draw_networkx_labels(all_links, pos_higher,labels)
+nx.draw(positive_links, pos=pos, edge_color='black')
+nx.draw_networkx_labels(positive_links, pos_higher,labels)
 plt.savefig("positive_correlation.jpg")
 
+#Negative Correlations
  
-list(nx.shortest_path_length(all_links))
-
- 
-links_filtered['var1'].value_counts()
+negative_correlations =links.loc[ (links['value'] < -0.5) & (links['country A'] != links['country B']) ]
 
  
-links_filtered=links.loc[ (links['value'] < -0.5) & (links['var1'] != links['var2']) ]
-
- 
-all_links = nx.from_pandas_edgelist(links_filtered, 'var1', 'var2')
+negative_links = nx.from_pandas_edgelist(negative_correlations, 'country A', 'country B')
 
 
-pos = nx.circular_layout(all_links)
+neg = nx.circular_layout(negative_links)
 
-labels = list(pos.keys())
+labels = list(neg.keys())
 labels = dict(zip(labels, labels))
 
-pos_higher = {}
+neg_higher = {}
 
-for k, v in pos.items():
+for k, v in neg.items():
     if(v[1]>0):
-        pos_higher[k] = (v[0], v[1]+0.06)
+        neg_higher[k] = (v[0], v[1]+0.06)
     else:
-        pos_higher[k] = (v[0], v[1]-0.06)
+        neg_higher[k] = (v[0], v[1]-0.06)
         
-pos_higher['Congo-Kinshasa'] = (pos_higher['Congo-Kinshasa'][0]+.05, pos_higher['Congo-Kinshasa'][1])
-pos_higher['Algeria'] = (pos_higher['Algeria'][0]+.05, pos_higher['Algeria'][1]+.1)
+neg_higher['Congo-Kinshasa'] = (neg_higher['Congo-Kinshasa'][0]+.05, neg_higher['Congo-Kinshasa'][1])
+neg_higher['Algeria'] = (neg_higher['Algeria'][0]+.05, neg_higher['Algeria'][1]+.1)
 
 
 fig, ax = plt.subplots(figsize=(20,20))
 margin=.05
 fig.subplots_adjust(margin, margin, 1.-margin, 1.-margin)
 ax.axis('equal')
-nx.draw(all_links, pos =pos, edge_color='black')
-nx.draw_networkx_labels(all_links, pos_higher,labels)
+nx.draw(negative_links, pos=neg, edge_color='black')
+nx.draw_networkx_labels(negative_links, neg_higher,labels)
 plt.savefig("negative_correlation.jpg")
 
- 
-eccentricity = nx.eccentricity(all_links)
+#Calculating Social Graph Measurements
+
+#Positive Correlations
+list(nx.shortest_path_length(positive_links))
+positive_correlations['country A'].value_counts()
+
+#Negative Correlations
+eccentricity = nx.eccentricity(negative_links)
 ecc_df = pd.DataFrame.from_dict(eccentricity, orient='index', columns=['Eccentricity']).rename_axis('Country', axis='index')
 ecc_df.sort_values(by='Eccentricity', ascending=False)
-
- 
-nx.diameter(all_links, e=eccentricity)
-
- 
-list(nx.shortest_path_length(all_links))
-
- 
+nx.diameter(negative_links, e=eccentricity)
+list(nx.shortest_path_length(negative_links))
